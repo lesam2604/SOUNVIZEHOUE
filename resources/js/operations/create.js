@@ -101,13 +101,10 @@ function setForm() {
 
 function initPartnerSelector() {
   try {
-    const canChoosePartner = typeof USER?.hasRole === 'function' && (USER.hasRole('collab') || USER.hasRole('reviewer') || USER.hasRole('admin'));
-    if (!canChoosePartner) {
-      $('#partnerSelectBlock').hide();
-      return;
-    }
+    // Toujours préparer le sélecteur (affichage géré ailleurs)
 
     $('#partnerSelectBlock').show();
+    if (!$('#partnerId').data('select2')) {
     $('#partnerId').select2({
       theme: 'bootstrap-5',
       placeholder: 'Rechercher un partenaire (code, nom, société)',
@@ -132,6 +129,7 @@ function initPartnerSelector() {
         }
       }
     });
+    }
   } catch (e) {
     console.warn('initPartnerSelector error:', e);
   }
@@ -170,9 +168,22 @@ async function createObject() {
 
   try {
     let endpoint = `${API_BASEURL}/operations/${opType.code}/store`;
+    const clientType = $('#clientType').val() || 'partner';
     const selectedPartnerId = $('#partnerId').val();
-    if (selectedPartnerId) {
+    if (clientType === 'partner') {
+      if (!selectedPartnerId) {
+        Swal.close();
+        return Toast.fire('Veuillez sélectionner un partenaire', '', 'error');
+      }
       endpoint = `${API_BASEURL}/operations/${opType.code}/store-for-partner/${selectedPartnerId}`;
+    } else {
+      // Création sans partenaire (client manuel)
+      // Ajouter les infos client + demandeur
+      formData.append('client_full_name', $('#client_full_name').val() || '');
+      formData.append('client_phone', $('#client_phone').val() || '');
+      formData.append('client_email', $('#client_email').val() || '');
+      formData.append('requester_name', $('#requester_name').val() || (USER?.full_name || ''));
+      endpoint = `${API_BASEURL}/operations/${opType.code}/store-without-partner`;
     }
 
     let { data } = await ajax({
@@ -640,6 +651,24 @@ async function otherInits() {
     object ? updateObject() : createObject();
   });
 
+  // Toggle des blocs selon type de client
+  const applyClientTypeToggle = () => {
+    const clientType = $('#clientType').val();
+    if (!clientType || clientType === 'partner') {
+      $('#partnerSelectBlock').show();
+      $('#manualClientBlock').hide();
+    } else {
+      $('#partnerSelectBlock').hide();
+      if (!$('#requester_name').val() && USER && USER.full_name) {
+        $('#requester_name').val(USER.full_name);
+      }
+      $('#manualClientBlock').show();
+      $('#partnerId').val('').change();
+    }
+  };
+  $('#clientType').on('change', applyClientTypeToggle);
+  applyClientTypeToggle();
+
   if (['account_recharge', 'balance_withdrawal'].includes(opType.code)) {
     $('#blockCommissions').hide();
   } else {
@@ -663,12 +692,20 @@ async function otherInits() {
     .attr('href', `/operations/${opType.code}`);
 
   object ? setForm() : clearForm();
+
+  // (Supprimé) Pas de bouton de création de facture depuis la création d'opération.
 }
 
 window.render = async function () {
   fetchOpType();
   await fetchObject();
   initFields();
-  await otherInits();
+  // Initialiser le sélecteur partenaire d'abord
   initPartnerSelector();
+  await otherInits();
+  // Fallback robuste: si pas de clientType ou valeur 'partner', afficher le sélecteur
+  const $ct = $('#clientType');
+  if ($ct.length === 0 || ($ct.val() || 'partner') === 'partner') {
+    $('#partnerSelectBlock').show();
+  }
 };

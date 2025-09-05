@@ -16,6 +16,7 @@
                             <th>Partenaire</th>
                             <th>Opération</th>
                             <th>Montant</th>
+                            <th>Frais</th>
                             <th>Date</th>
                             <th>Status</th>
                             <th>Actions</th>
@@ -28,7 +29,43 @@
                             <td>{{ optional($req->requester)->first_name }} {{ optional($req->requester)->last_name }}</td>
                             <td>{{ optional(optional($req->operation->partner)->user)->first_name }} {{ optional(optional($req->operation->partner)->user)->last_name }}</td>
                             <td>{{ optional($req->operation->operationType)->name }} ({{ $req->operation->code }})</td>
-                            <td>{{ number_format($req->operation->amount ?? 0, 0, ',', ' ') }} FCFA</td>
+                            @php
+                                $op = $req->operation;
+                                $opCode = optional($op->operationType)->code;
+                                if ($opCode === 'account_recharge') {
+                                    // Montant réel pour recharge de compte; frais = 0
+                                    $amountVal = (float) ($op->data->trans_amount ?? 0);
+                                    $senderType = $op->data->sender_phone_number_type ?? '';
+                                    $feeVal    = ($senderType === 'MomoPay') ? round($amountVal * (0.005 / 0.995)) : 0;
+                                } elseif ($opCode === 'balance_withdrawal') {
+                                    // Montant et frais (2%) pour retrait de solde
+                                    $amountVal = (float) ($op->data->amount ?? 0);
+                                    $feeVal    = $amountVal * 0.02;
+                                } else {
+                                    // Montant et frais pour les autres opérations
+                                    $amountVal = (float) ($op->amount ?? 0);
+                                    $feeVal    = (float) ($op->fee ?? 0);
+                                    if ((float)$feeVal === 0.0 && $op->operationType) {
+                                        $opTypeObj = $op->operationType;
+                                        $amountField = $opTypeObj->amount_field ?? null;
+                                        $baseAmount = $amountField ? (float) ($op->data->{$amountField} ?? 0) : $amountVal;
+                                        $cardType = $op->data->card_type ?? null;
+                                        $master = optional($op->partner)->getMaster();
+
+                                        if ($baseAmount > 0 && $master) {
+                                            if ($master->hasCommissions($opTypeObj->id, $cardType)) {
+                                                [$tmp, $calcFee] = $opTypeObj->getFee($baseAmount, $cardType);
+                                                $feeVal = (float) $calcFee;
+                                            } else {
+                                                $feeVal = ($opTypeObj->code === 'card_recharge') ? 0 : ($baseAmount <= 500000 ? 100 : 200);
+                                            }
+                                            if ($amountVal === 0.0) { $amountVal = $baseAmount; }
+                                        }
+                                    }
+                                }
+                            @endphp
+                            <td>{{ number_format($amountVal, 0, ',', ' ') }} FCFA</td>
+                            <td>{{ number_format($feeVal, 0, ',', ' ') }} FCFA</td>
                             <td>{{ $req->created_at->format('d/m/Y H:i') }}</td>
                             <td>
                                 @if($req->status === 'pending')
@@ -81,9 +118,17 @@ document.querySelectorAll('.approve-btn').forEach(btn => {
             .then(response => {
                 if (response.data.ok) {
                     showToast(response.data.message, 'success');
-                    document.querySelector(`#request-${id} td:nth-child(7) span`).className = 'badge bg-success';
+                    // maj statut (col 8)
+                    (function(){
+                        const el = document.querySelector(`#request-${id} td:nth-child(8) span`);
+                        if (el) {
+                            el.className = 'badge bg-success';
+                            el.innerText = 'Approuvee';
+                        }
+                    })();
+                    document.querySelector(`#request-${id} td:nth-child(8) span`).className = 'badge bg-success';
                     document.querySelector(`#request-${id} td:nth-child(7) span`).innerText = 'Approuvée';
-                    document.querySelector(`#request-${id} td:nth-child(8)`).innerHTML = '-';
+                    document.querySelector(`#request-${id} td:nth-child(9)`).innerHTML = '-';
                 } else {
                     showToast(response.data.message, 'error');
                 }
@@ -100,9 +145,17 @@ document.querySelectorAll('.reject-btn').forEach(btn => {
             .then(response => {
                 if (response.data.ok) {
                     showToast(response.data.message, 'success');
+                    // maj statut (col 8)
+                    (function(){
+                        const el = document.querySelector(`#request-${id} td:nth-child(8) span`);
+                        if (el) {
+                            el.className = 'badge bg-danger';
+                            el.innerText = 'Rejetee';
+                        }
+                    })();
                     document.querySelector(`#request-${id} td:nth-child(7) span`).className = 'badge bg-danger';
                     document.querySelector(`#request-${id} td:nth-child(7) span`).innerText = 'Rejetée';
-                    document.querySelector(`#request-${id} td:nth-child(8)`).innerHTML = '-';
+                    document.querySelector(`#request-${id} td:nth-child(9)`).innerHTML = '-';
                 } else {
                     showToast(response.data.message, 'error');
                 }

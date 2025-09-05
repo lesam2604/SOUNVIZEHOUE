@@ -139,7 +139,7 @@ Route::get('/decoders/stock/{status?}', fn($status = '') => view('decoders.stock
 foreach ([
     'money-transfers', 'withdrawals', 'inv-categories', 'inv-products', 'inv-supplies', 'inv-orders', 'inv-deliveries',
     'card-types', 'card-categories', 'cards', 'card-orders', 'decoders', 'decoder-orders', 'scrolling-messages',
-    'broadcast-messages', 'extra-clients'
+    'broadcast-messages', 'extra-clients', 'invoices'
 ] as $groupName) {
     Route::prefix($groupName)->group(function () use ($groupName) {
         Route::get('/', fn() => view("{$groupName}.list"));
@@ -158,6 +158,13 @@ Route::prefix('partners')->group(function () {
     Route::get('/{objectId}', fn($objectId) => view('partners.view', compact('objectId')));
     Route::get('/{objectId}/edit', fn($objectId) => view('partners.edit', compact('objectId')));
 });
+
+// Page admin: performances des collaborateurs
+Route::get('/admin/collab-performances', fn() => view('admin.collab-performances'));
+
+// Exports de factures (GET accessibles depuis le navigateur)
+Route::get('/invoices/export-csv/{id}', [\App\Http\Controllers\Api\v1\InvoiceController::class, 'exportCsv']);
+Route::get('/invoices/export-pdf/{id}', [\App\Http\Controllers\Api\v1\InvoiceController::class, 'exportPdf']);
 
 Route::prefix('collabs')->group(function () {
     Route::get('/{opStatus?}', fn($opStatus = '') => view('collabs.list', compact('opStatus')))

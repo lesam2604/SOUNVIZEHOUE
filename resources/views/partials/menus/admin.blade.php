@@ -194,6 +194,21 @@
 
   <li class="sidebar-title">Autres</li>
 
+  <li class="sidebar-item has-sub">
+    <a href="#" class="sidebar-link">
+      <i class="fas fa-file-invoice"></i>
+      <span>Factures</span>
+    </a>
+    <ul class="submenu">
+      <li class="submenu-item">
+        <a href="/invoices/create"><i class="fas fa-plus"></i> Nouvelle facture</a>
+      </li>
+      <li class="submenu-item">
+        <a href="/invoices"><i class="fas fa-list"></i> Liste des factures</a>
+      </li>
+    </ul>
+  </li>
+
   <li class="sidebar-item">
     <a href="/commissions/partners" class="sidebar-link">
       <i class="fas fa-percent"></i>
@@ -205,6 +220,13 @@
     <a href="/commissions/platform" class="sidebar-link">
       <i class="fas fa-percent"></i>
       <span>Commissions de la plateforme</span>
+    </a>
+  </li>
+
+  <li class="sidebar-item">
+    <a href="/admin/collab-performances" class="sidebar-link">
+      <i class="fas fa-chart-line"></i>
+      <span>Perf. Collaborateurs</span>
     </a>
   </li>
 

@@ -73,6 +73,27 @@
                   <div class="row">
                     <div class="col-3 d-flex justify-content-start">
                       <div class="stats-icon blue mb-2">
+                        <i class="fas fa-chart-line"></i>
+                      </div>
+                    </div>
+                    <div class="col-9">
+                      <h6 class="text-muted font-semibold">Perf. Collaborateurs</h6>
+                      <h6 class="font-extrabold mb-0">Ventes cartes & montants</h6>
+                      <div class="text-end">
+                        <a href="/admin/collab-performances" title="Voir les performances"
+                           class="card-link btn btn-sm btn-outline-primary"><i class="fas fa-arrow-right"></i></a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-12 col-lg-4 col-md-6">
+              <div class="card">
+                <div class="card-body px-4 py-4">
+                  <div class="row">
+                    <div class="col-3 d-flex justify-content-start">
+                      <div class="stats-icon blue mb-2">
                         <i class="fas fa-paper-plane"></i>
                       </div>
                     </div>
@@ -82,6 +103,27 @@
                       <div class="text-end">
                         <a href="/money-transfers" title="Accéder a la liste"
                           class="card-link btn btn-sm btn-outline-primary"><i class="fas fa-list"></i></a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-12 col-lg-4 col-md-6">
+              <div class="card">
+                <div class="card-body px-4 py-4">
+                  <div class="row">
+                    <div class="col-3 d-flex justify-content-start">
+                      <div class="stats-icon blue mb-2">
+                        <i class="fas fa-file-invoice"></i>
+                      </div>
+                    </div>
+                    <div class="col-9">
+                      <h6 class="text-muted font-semibold">Factures</h6>
+                      <h6 class="font-extrabold mb-0">Créer et gérer</h6>
+                      <div class="d-flex gap-2 justify-content-end">
+                        <a href="/invoices" class="btn btn-sm btn-outline-primary" title="Liste des factures"><i class="fas fa-list"></i></a>
+                        <a href="/invoices/create" class="btn btn-sm btn-primary" title="Nouvelle facture"><i class="fas fa-plus"></i></a>
                       </div>
                     </div>
                   </div>

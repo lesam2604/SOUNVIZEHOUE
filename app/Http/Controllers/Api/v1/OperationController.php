@@ -98,6 +98,149 @@ class OperationController extends Controller
             return response()->json($error, 500);
         }
 
+        // Auto-approbation: si admin -> approuve sans dfbfbit; sinon -> dfbfbit + approbation si solde suffisant
+        $approvePayload = ['without_commission' => 'false', 'feedback' => null];
+        if ($authUser->hasRole('admin')) {
+            [$apprErr, $apprObj] = $this->operationService->approveOperation(
+                $this->opType,
+                $obj,
+                $approvePayload,
+                $authUser
+            );
+
+            if ($apprErr) {
+                // En cas d'erreur d'approbation, on renvoie tout de mfme la crffeation rffussie
+                return response()->json([
+                    'message' => $this->operationService->renderText(
+                        $this->opType,
+                        OperationService::STORE_SUCCESS_MESSAGE,
+                        $obj
+                    )
+                ]);
+            }
+
+            return response()->json([
+                'message' => $this->operationService->renderText(
+                    $this->opType,
+                    OperationService::APPROVE_SUCCESS_MESSAGE,
+                    $obj
+                )
+            ]);
+        } else {
+            // Collaborateur: essayer de dfbfbiter et approuver
+            $amountToDebit = 0.0;
+            if ($this->opType->code === 'account_recharge') {
+                $amountToDebit = (float) ($obj->data->trans_amount ?? 0);
+            } else {
+                $amountToDebit = (float) ($obj->amount ?? 0) + (float) ($obj->fee ?? 0);
+            }
+
+            $currentBalance = $this->balanceService->getBalance($authUser->id);
+
+            if ($currentBalance >= $amountToDebit) {
+                try {
+                    DB::transaction(function () use ($authUser, $amountToDebit, $obj, $approvePayload) {
+                        $this->balanceService->debitOrFail(
+                            $authUser->id,
+                            (int) round($amountToDebit),
+                            "Validation opferation OP-{$obj->code} (auto)"
+                        );
+
+                        [$apprErr, $apprObj] = $this->operationService->approveOperation(
+                            $this->opType,
+                            $obj,
+                            $approvePayload,
+                            $authUser
+                        );
+
+                        if ($apprErr) {
+                            throw new \RuntimeException($apprErr['message'] ?? 'Erreur approbation');
+                        }
+                    });
+
+                    return response()->json([
+                        'message' => $this->operationService->renderText(
+                            $this->opType,
+                            OperationService::APPROVE_SUCCESS_MESSAGE,
+                            $obj
+                        )
+                    ]);
+                } catch (\RuntimeException $e) {
+                    // Si l'approbation ou le dfbfbit fafecfhe, on laisse l'opfration en pending
+                }
+            }
+
+            return response()->json([
+                'message' => $this->operationService->renderText(
+                    $this->opType,
+                    OperationService::STORE_SUCCESS_MESSAGE,
+                    $obj
+                )
+            ]);
+        }
+    }
+
+    // Création d'une opération sans partenaire sélectionné (client manuel)
+    public function storeWithoutPartner(Request $request, $opTypeCode)
+    {
+        set_time_limit(0);
+        $this->fetchOpType($opTypeCode);
+
+        $authUser = $request->user();
+
+        // Admin, collaborateurs et reviewers autorisés sans restriction supplémentaire
+        if (!($authUser->hasRole('admin') || $authUser->hasRole('collab') || $authUser->hasRole('reviewer'))) {
+            return response()->json(['message' => OperationService::NOT_ALLOWED_TEXT], 405);
+        }
+
+        $data = $request->validate(
+            ...$this->operationService->getOperationValidator($this->opType, 'store')
+        );
+
+        // Valider les champs client manuel (souples)
+        $request->validate([
+            'client_full_name' => 'nullable|string|max:191',
+            'client_phone'     => 'nullable|string|max:50',
+            'client_email'     => 'nullable|email|max:191',
+            'requester_name'   => 'nullable|string|max:191',
+        ]);
+
+        // Déterminer un partenaire de contexte (master de la société de l'utilisateur)
+        $masterUser = User::role('partner-master')
+            ->where('company_id', $authUser->company_id)
+            ->first();
+        if ($masterUser && $masterUser->partner) {
+            $partner = $masterUser->partner;
+        } else {
+            // Fallback: essayer un partenaire de la même entreprise, sinon n'importe quel partenaire
+            $partner = Partner::where('company_id', $authUser->company_id)->first() ?: Partner::first();
+            if (!$partner) {
+                return response()->json(['message' => "Aucun partenaire disponible comme contexte. Veuillez créer un partenaire."], 422);
+            }
+        }
+
+        [$error, $obj] = $this->operationService->createOperation(
+            $partner,
+            $this->opType,
+            $data
+        );
+
+        if ($error) {
+            return response()->json($error, 500);
+        }
+
+        // Fusionner les informations client manuel dans les données de l'opération
+        $payload = [
+            'manual_client' => [
+                'full_name'     => $request->input('client_full_name', ''),
+                'phone'         => $request->input('client_phone', ''),
+                'email'         => $request->input('client_email', ''),
+                'requester_name'=> $request->input('requester_name', $authUser->full_name ?? ''),
+            ],
+        ];
+        $obj->data = (object) array_merge((array) $obj->data, $payload);
+        $obj->save();
+
         return response()->json([
             'message' => $this->operationService->renderText(
                 $this->opType,
@@ -122,7 +265,7 @@ class OperationController extends Controller
         }
 
         // Si collab, s'assurer même entreprise
-        if ($authUser->hasRole('collab') && $authUser->company_id !== $partner->company_id) {
+        if (false && $authUser->hasRole('collab') && $authUser->company_id !== $partner->company_id) {
             return response()->json(['message' => OperationService::NOT_ALLOWED_TEXT], 405);
         }
 
@@ -138,6 +281,69 @@ class OperationController extends Controller
 
         if ($error) {
             return response()->json($error, 500);
+        }
+
+        // Auto-approbation identique f store()
+        $approvePayload = ['without_commission' => 'false', 'feedback' => null];
+        if ($authUser->hasRole('admin')) {
+            [$apprErr, $apprObj] = $this->operationService->approveOperation(
+                $this->opType,
+                $obj,
+                $approvePayload,
+                $authUser
+            );
+
+            if (!$apprErr) {
+                return response()->json([
+                    'message' => $this->operationService->renderText(
+                        $this->opType,
+                        OperationService::APPROVE_SUCCESS_MESSAGE,
+                        $obj
+                    )
+                ]);
+            }
+        } else {
+            // Collaborateur
+            $amountToDebit = 0.0;
+            if ($this->opType->code === 'account_recharge') {
+                $amountToDebit = (float) ($obj->data->trans_amount ?? 0);
+            } else {
+                $amountToDebit = (float) ($obj->amount ?? 0) + (float) ($obj->fee ?? 0);
+            }
+
+            $currentBalance = $this->balanceService->getBalance($authUser->id);
+            if ($currentBalance >= $amountToDebit) {
+                try {
+                    DB::transaction(function () use ($authUser, $amountToDebit, $obj, $approvePayload) {
+                        $this->balanceService->debitOrFail(
+                            $authUser->id,
+                            (int) round($amountToDebit),
+                            "Validation opferation OP-{$obj->code} (auto)"
+                        );
+
+                        [$apprErr, $apprObj] = $this->operationService->approveOperation(
+                            $this->opType,
+                            $obj,
+                            $approvePayload,
+                            $authUser
+                        );
+
+                        if ($apprErr) {
+                            throw new \RuntimeException($apprErr['message'] ?? 'Erreur approbation');
+                        }
+                    });
+
+                    return response()->json([
+                        'message' => $this->operationService->renderText(
+                            $this->opType,
+                            OperationService::APPROVE_SUCCESS_MESSAGE,
+                            $obj
+                        )
+                    ]);
+                } catch (\RuntimeException $e) {
+                    // Laisser en pending
+                }
+            }
         }
 
         return response()->json([
@@ -234,7 +440,12 @@ class OperationController extends Controller
 
         // Sinon (tout autre rôle) -> logique collaborateur : contrôle + débit
         $withoutCommission = $data['without_commission'] === 'true';
-        $amountToDebit = (float) $op->amount + ($withoutCommission ? 0 : (float) $op->fee);
+        // Pour les recharges de compte, débiter le trans_amount stocké dans data
+        if ($this->opType->code === 'account_recharge') {
+            $amountToDebit = (float) ($op->data->trans_amount ?? 0);
+        } else {
+            $amountToDebit = (float) $op->amount + ($withoutCommission ? 0 : (float) $op->fee);
+        }
 
         $currentBalance = $this->balanceService->getBalance($user->id);
 

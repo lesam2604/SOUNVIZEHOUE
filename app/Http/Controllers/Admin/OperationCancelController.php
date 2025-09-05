@@ -46,7 +46,16 @@ class OperationCancelController extends Controller
 
         DB::transaction(function () use ($req) {
             $operation = $req->operation;
-            $amount    = (float) ($operation->amount ?? 0);
+            // Determine refund amount and revert partner balance for account recharges
+            $opTypeCode = optional($operation->operationType)->code;
+            if ($opTypeCode === 'account_recharge') {
+                $amount = (float) ($operation->data->trans_amount ?? 0);
+                $master = $operation->partner->getMaster();
+                $master->balance -= $amount;
+                $master->save();
+            } else {
+                $amount    = (float) ($operation->amount ?? 0);
+            }
 
             $collabBal = CollaboratorBalance::firstOrCreate(
                 ['user_id' => $req->requested_by],
@@ -84,4 +93,3 @@ class OperationCancelController extends Controller
         return response()->json(['ok'=>true,'message'=>'Demande rejetée.']);
     }
 }
-

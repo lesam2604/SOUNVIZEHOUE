@@ -33,6 +33,8 @@ use App\Http\Controllers\Api\v1\UserController;
 use App\Http\Controllers\Api\v1\WithdrawalController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\v1\OperationCancellationRequestController;
+use App\Http\Controllers\Api\v1\InvoiceController;
+use App\Http\Controllers\Api\v1\PerformanceController;
 
 /*
 |--------------------------------------------------------------------------
@@ -71,6 +73,13 @@ Route::prefix('v1')->group(function () {
             Route::get('{collab}/balance', 'showByCollab')->role('admin');
             Route::post('{collab}/balance/adjust', 'adjustByCollab')->role('admin');
         });
+        
+        
+        Route::middleware(['auth:sanctum', 'enabled', 'role:admin'])->prefix('admin')->group(function () {
+        Route::get('collabs/{collab}/balance', [\App\Http\Controllers\Admin\CollaboratorBalanceController::class, 'showByCollab']);
+        Route::post('collabs/{collab}/balance/adjust', [\App\Http\Controllers\Admin\CollaboratorBalanceController::class, 'adjustByCollab']);
+        });
+
 
         Route::prefix('collabs')->controller(CollabController::class)->group(function () {
             Route::get('dashboard-data', 'dashboardData')->role('collab');
@@ -121,7 +130,7 @@ Route::prefix('v1')->group(function () {
             // Autoriser explicitement admin/collab/partner à créer
             Route::post('store', 'store')->role('admin|collab|partner');
             // Création sans sélection de partenaire: admin et collab, avec fallback interne
-            Route::post('store-without-partner', 'storeWithoutPartner')->role('admin|collab');
+            Route::post('store-without-partner', 'storeWithoutPartner')->role('admin|collab|reviewer');
             // Création pour un partenaire: admin et collab
             Route::post('store-for-partner/{partner}', 'storeForPartner')->role('admin|collab');
             Route::post('update/{id}', 'update')->can('edit operation');
@@ -292,6 +301,23 @@ Route::prefix('v1')->group(function () {
             Route::post('list', 'list')->can('view decoder');
             Route::post('list-stock', 'listStock')->can('view decoder stock');
             Route::post('total-stock', 'totalStock')->can('view decoder stock');
+        });
+
+        // Invoices
+        Route::prefix('invoices')->controller(InvoiceController::class)->group(function () {
+            Route::get('fetch/{id}', 'fetch')->role('admin|collab|reviewer');
+            Route::post('list', 'list')->role('admin|collab|reviewer');
+            Route::post('{opTypeCode}/store', 'store')->role('admin|collab|reviewer');
+            Route::post('update/{id}', 'update')->role('admin|collab|reviewer');
+            Route::post('mark-paid/{id}', 'markPaid')->role('admin|collab|reviewer');
+            Route::get('export-csv/{id}', 'exportCsv')->role('admin|collab|reviewer');
+            Route::get('export-pdf/{id}', 'exportPdf')->role('admin|collab|reviewer');
+        });
+
+        // Performances
+        Route::prefix('performance')->group(function () {
+            Route::post('collabs', [PerformanceController::class, 'collabSales'])->role('admin');
+            Route::post('collabs-by-type', [PerformanceController::class, 'collabSalesByType'])->role('admin');
         });
 
         Route::prefix('decoder-orders')->controller(DecoderOrderController::class)->group(function () {

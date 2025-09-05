@@ -99,131 +99,86 @@ window.render = async function () {
   if (object.status !== 'disabled') $('#enable').hide();
   if (object.status !== 'enabled') $('#disable').hide();
 
- // ─────────────── AJUSTEMENT SOLDE ───────────────
-const $balance  = $('#collabBalance');
-const $currency = $('#collabCurrency');
+  // ─────────────── AJUSTEMENT SOLDE ───────────────
+  const $balance  = $('#collabBalance');
+  const $currency = $('#collabCurrency');
 
-// utilitaire: on vise l'id du user si dispo, sinon fallback sur object.id
-function targetId () {
-  return (object && typeof object.user_id !== 'undefined' && object.user_id)
-    ? object.user_id
-    : object.id;
-}
-
-async function refreshBalance() {
-  try {
-    // GET JSON côté web (route /admin/collabs/{id}/balance) — on passe le bon id
-    const res = await $.get(`/admin/collabs/${targetId()}/balance`);
-    if (res?.ok) {
-      // format simple (tu peux remplacer par formatAmountSpaced si tu veux “xx xxx FCFA”)
-      $balance.text(res.balance);
-      $currency.text(res.currency || '');
-    }
-  } catch (e) {
-    console.error('Erreur refreshBalance:', e);
+  // utilitaire: on vise l'id du user si dispo, sinon fallback sur object.id
+  function targetId () {
+    return (object && typeof object.user_id !== 'undefined' && object.user_id)
+      ? object.user_id
+      : object.id;
   }
-}
 
-$('#btnOpenAdjust').on('click', () => $('#modalAdjustBalance').modal('show'));
-
-/*$('#formAdjustBalance').on('submit', async function (e) {
-  e.preventDefault();
-  const form = $(this);
-  const payload = {
-    direction: form.find('[name="direction"]').val(),
-    amount:    form.find('[name="amount"]').val(),
-    reason:    form.find('[name="reason"]').val(),
-  };
-
-  try {
-    Swal.fire({
-      title: 'Traitement...',
-      allowOutsideClick: false,
-      didOpen: () => Swal.showLoading()
-    });
-
-    // POST sur l’id correct (user_id prioritaire)
-    const { data } = await ajax({
-      url: `/admin/collabs/${targetId()}/balance/adjust`,
-      type: 'POST',
-      data: payload,
-      headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') || '' },
-    });
-
-    Swal.close();
-
-    if (data?.ok) {
-      await Swal.fire(data.message || 'Solde mis à jour.', '', 'success');
-      $('#modalAdjustBalance').modal('hide');
-      refreshBalance();
-    } else {
-      await Swal.fire(data?.message || 'Erreur.', '', 'error');
+  async function refreshBalance() {
+    try {
+      // ✅ URL corrigée avec /api/v1
+      const res = await $.get(`${API_BASEURL}/admin/collabs/${targetId()}/balance`);
+      if (res?.ok) {
+        $balance.text(res.balance);
+        $currency.text(res.currency || '');
+      }
+    } catch (e) {
+      console.error('Erreur refreshBalance:', e);
     }
-  } catch (err) {
-    Swal.close();
-    console.error('Erreur adjust balance:', err);
-    const msg = err?.responseJSON?.message || err?.message || 'Erreur.';
-    Swal.fire(msg, '', 'error');
   }
-});*/
 
-$('#formAdjustBalance').on('submit', async function (e) {
-  e.preventDefault();
-  const form = $(this);
+  $('#btnOpenAdjust').on('click', () => $('#modalAdjustBalance').modal('show'));
 
-  // ——— Sanitize montant: supprime espaces, points, etc. pour garder un entier XOF ———
-  const rawAmount = form.find('[name="amount"]').val();
-  const cleanedAmount = String(rawAmount || '')
-    .replace(/\s+/g, '')    // enlève espaces
-    .replace(/,/g, '')      // enlève virgules 1,000
-    .replace(/\./g, '');    // enlève points 1.000
-  const amountInt = parseInt(cleanedAmount, 10) || 0;
+  $('#formAdjustBalance').on('submit', async function (e) {
+    e.preventDefault();
+    const form = $(this);
 
-  const payload = {
-    direction: form.find('[name="direction"]').val(),
-    amount: amountInt, // on envoie un entier propre
-    reason: form.find('[name="reason"]').val(),
-  };
+    // ——— Sanitize montant ———
+    const rawAmount = form.find('[name="amount"]').val();
+    const cleanedAmount = String(rawAmount || '')
+      .replace(/\s+/g, '')
+      .replace(/,/g, '')
+      .replace(/\./g, '');
+    const amountInt = parseInt(cleanedAmount, 10) || 0;
 
-  try {
-    Swal.fire({
-      title: 'Traitement...',
-      allowOutsideClick: false,
-      didOpen: () => Swal.showLoading()
-    });
+    const payload = {
+      direction: form.find('[name="direction"]').val(),
+      amount: amountInt,
+      reason: form.find('[name="reason"]').val(),
+    };
 
-    // debug utile en cas de CSRF
-    const csrf = $('meta[name="csrf-token"]').attr('content') || '';
-    console.log('[adjust] POST /admin/collabs/'+object.id+'/balance/adjust', payload, 'csrf?', !!csrf);
+    try {
+      Swal.fire({
+        title: 'Traitement...',
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading()
+      });
 
-    const { data } = await ajax({
-      url: `/admin/collabs/${object.id}/balance/adjust`,
-      type: 'POST',
-      data: payload,
-      headers: { 'X-CSRF-TOKEN': csrf },
-    });
+      const csrf = $('meta[name="csrf-token"]').attr('content') || '';
+      console.log('[adjust] POST /api/v1/admin/collabs/'+object.id+'/balance/adjust', payload, 'csrf?', !!csrf);
 
-    Swal.close();
+      // ✅ URL corrigée avec /api/v1
+      const { data } = await ajax({
+        url: `${API_BASEURL}/admin/collabs/${object.id}/balance/adjust`,
+        type: 'POST',
+        data: payload,
+        headers: { 'X-CSRF-TOKEN': csrf },
+      });
 
-    if (data?.ok) {
-      await Swal.fire(data.message || 'Solde mis à jour.', '', 'success');
-      $('#modalAdjustBalance').modal('hide');
-      refreshBalance();
-    } else {
-      // le contrôleur peut renvoyer ok:false (422 solde insuffisant par ex.)
-      await Swal.fire(data?.message || 'Erreur.', '', 'error');
+      Swal.close();
+
+      if (data?.ok) {
+        await Swal.fire(data.message || 'Solde mis à jour.', '', 'success');
+        $('#modalAdjustBalance').modal('hide');
+        refreshBalance();
+      } else {
+        await Swal.fire(data?.message || 'Erreur.', '', 'error');
+      }
+    } catch (err) {
+      Swal.close();
+      const status = err?.status || err?.error?.status || '???';
+      const body = err?.responseJSON?.message || err?.error?.responseJSON?.message || err?.responseText || err?.error?.responseText || err?.message || 'Erreur.';
+      console.error('Erreur adjust balance:', { status, err });
+      Swal.fire(`Erreur (${status})`, body, 'error');
     }
-  } catch (err) {
-    Swal.close();
-    // Montrer l'erreur REELLE (status + body) pour qu’on sache quoi corriger
-    const status = err?.status || err?.error?.status || '???';
-    const body = err?.responseJSON?.message || err?.error?.responseJSON?.message || err?.responseText || err?.error?.responseText || err?.message || 'Erreur.';
-    console.error('Erreur adjust balance:', { status, err });
-    Swal.fire(`Erreur (${status})`, body, 'error');
-  }
-});
+  });
 
-
-// Premier affichage du solde
-refreshBalance();
+  // Premier affichage du solde
+  refreshBalance();
 };

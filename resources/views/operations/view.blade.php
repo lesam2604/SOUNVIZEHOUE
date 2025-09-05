@@ -1,4 +1,4 @@
-@extends('layouts.app')
+﻿@extends('layouts.app')
 
 @section('cssPlugins')
 @endsection
@@ -27,7 +27,7 @@
       <table class="table table-bordered">
         <tbody>
           <tr>
-            <th>Montant de l'opération</th>
+            <th>Montant de l'opÃ©ration</th>
             <td id="amount" class="fw-bold"></td>
           </tr>
           <tr>
@@ -63,7 +63,7 @@
             <td id="codePartner"></td>
           </tr>
           <tr>
-            <th>Prénom</th>
+            <th>PrÃ©nom</th>
             <td id="firstName"></td>
           </tr>
           <tr>
@@ -71,11 +71,11 @@
             <td id="lastName"></td>
           </tr>
           <tr>
-            <th>Établissement</th>
+            <th>Ã‰tablissement</th>
             <td id="companyName"></td>
           </tr>
           <tr>
-            <th>Numéro IFU</th>
+            <th>NumÃ©ro IFU</th>
             <td id="tin"></td>
           </tr>
         </tbody>
@@ -91,7 +91,7 @@
       <table class="table table-bordered">
         <tbody>
           <tr>
-            <th>Statut de l'opération</th>
+            <th>Statut de l'opÃ©ration</th>
             <td id="status"></td>
           </tr>
           <tr>
@@ -116,15 +116,21 @@
       <h4 class="mb-0">Actions</h4>
     </div>
     <div class="card-body">
-      <button type="button" class="btn btn-lg btn-outline-primary" id="edit" data-permission="edit operation"><i
-          class="fas me-2 fa-pen"></i> Éditer</button>
-      <button type="button" class="btn btn-lg btn-outline-success" id="approve" data-permission="review operation"><i
-          class="fas me-2 fa-thumbs-up"></i> Approver</button>
-      <button type="button" class="btn btn-lg btn-outline-info" id="approveWithoutCommission"
-        data-permission="review operation"><i class="fas me-2 fa-thumbs-up"></i> Approver sans les commissions</button>
-      <button type="button" class="btn btn-lg btn-outline-danger" id="reject" data-permission="review operation"><i
-          class="fas me-2 fa-thumbs-down"></i> Rejeter</button>
-    </div>
+      <button type="button" class="btn btn-lg btn-outline-primary" id="edit" data-permission="edit operation">
+        <i class="fas me-2 fa-pen"></i> Éditer
+      </button>
+      <button type="button" class="btn btn-lg btn-outline-success" id="approve" data-permission="review operation">
+        <i class="fas me-2 fa-thumbs-up"></i> Approuver
+      </button>
+      <button type="button" class="btn btn-lg btn-outline-info" id="approveWithoutCommission" data-permission="review operation">
+        <i class="fas me-2 fa-thumbs-up"></i> Approuver sans les commissions
+      </button>
+      <button type="button" class="btn btn-lg btn-outline-warning" id="createInvoice">
+        <i class="fas me-2 fa-file-invoice"></i> Créer une facture
+      </button>
+      <button type="button" class="btn btn-lg btn-outline-danger" id="reject" data-permission="review operation">
+        <i class="fas me-2 fa-thumbs-down"></i> Rejeter
+      </button>    </div>
   </div>
 
   <input type="hidden" value="{{ $opTypeCode }}" id="opTypeCode">
@@ -134,3 +140,4 @@
 @section('pageJs')
   @vite('resources/js/operations/view.js')
 @endsection
+

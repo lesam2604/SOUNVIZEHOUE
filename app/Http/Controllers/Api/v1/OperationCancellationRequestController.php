@@ -102,7 +102,16 @@ class OperationCancellationRequestController extends Controller
 
         DB::transaction(function () use ($req) {
             $operation = $req->operation;
-            $amount    = (float) ($operation->amount ?? 0);
+            // Determine refund amount and revert partner balance for account recharges
+            $opTypeCode = optional($operation->operationType)->code;
+            if ($opTypeCode === 'account_recharge') {
+                $amount = (float) ($operation->data->trans_amount ?? 0);
+                $master = $operation->partner->getMaster();
+                $master->balance -= $amount;
+                $master->save();
+            } else {
+                $amount    = (float) ($operation->amount ?? 0);
+            }
 
             // Créditer le solde du collaborateur qui a demandé
             app(CollaboratorBalanceService::class)

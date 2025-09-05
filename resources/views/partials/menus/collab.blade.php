@@ -181,6 +181,21 @@
 
   <li class="sidebar-item has-sub">
     <a href="#" class="sidebar-link">
+      <i class="fas fa-file-invoice"></i>
+      <span>Factures</span>
+    </a>
+    <ul class="submenu">
+      <li class="submenu-item">
+        <a href="/invoices/create"><i class="fas fa-plus"></i> Nouvelle facture</a>
+      </li>
+      <li class="submenu-item">
+        <a href="/invoices"><i class="fas fa-list"></i> Liste des factures</a>
+      </li>
+    </ul>
+  </li>
+
+  <li class="sidebar-item has-sub">
+    <a href="#" class="sidebar-link">
       <i class="fas fa-exchange-alt"></i>
       <span>Transferts</span>
     </a>
