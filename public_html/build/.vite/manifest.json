@@ -347,7 +347,7 @@
     "isEntry": true
   },
   "resources/js/invoices/create.js": {
-    "file": "assets/create-BwAvxsb2.js",
+    "file": "assets/create-Cnvk6nVD.js",
     "name": "create",
     "src": "resources/js/invoices/create.js",
     "isEntry": true
@@ -407,19 +407,19 @@
     "isEntry": true
   },
   "resources/js/operations/create.js": {
-    "file": "assets/create-CoPtWfQA.js",
+    "file": "assets/create-BwOyEdc2.js",
     "name": "create",
     "src": "resources/js/operations/create.js",
     "isEntry": true
   },
   "resources/js/operations/list.js": {
-    "file": "assets/list-BZmauNjU.js",
+    "file": "assets/list-dKde29PT.js",
     "name": "list",
     "src": "resources/js/operations/list.js",
     "isEntry": true
   },
   "resources/js/operations/view.js": {
-    "file": "assets/view-CKU_BRhv.js",
+    "file": "assets/view-Dl8rlUgk.js",
     "name": "view",
     "src": "resources/js/operations/view.js",
     "isEntry": true
@@ -461,7 +461,7 @@
     "isEntry": true
   },
   "resources/js/partners/performances.js": {
-    "file": "assets/performances-mtVdyRjY.js",
+    "file": "assets/performances-CkTdJMbV.js",
     "name": "performances",
     "src": "resources/js/partners/performances.js",
     "isEntry": true

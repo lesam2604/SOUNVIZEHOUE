@@ -909,6 +909,115 @@ class PartnerController extends Controller
             'data_amount' => 0,
         ]);
 
+        // Nombre total de cartes vendues (cartes rattachées à une commande)
+        $cardsSold = DB::table('cards AS c')
+            ->join('card_orders AS co', 'co.id', '=', 'c.card_order_id')
+            ->when($request->partner_id, function ($q, $partnerId) {
+                $q->where('co.partner_id', $partnerId);
+            })
+            ->when($request->from_date, function ($q, $fromDate) {
+                $q->where('co.created_at', '>=', $fromDate);
+            })
+            ->when($request->to_date, function ($q, $toDate) {
+                $q->where('co.created_at', '<', $toDate);
+            })
+            ->count('c.id');
+
+        $perfs->push((object) [
+            'code' => 'cards_sold',
+            'name' => 'Cartes vendues',
+            'icon_class' => 'fas fa-credit-card',
+            'card_type' => null,
+            'nb' => (int) $cardsSold,
+            'amount' => 0,
+            'fee' => 0,
+            'commission' => 0,
+            'data_trans_amount' => 0,
+            'data_amount' => 0,
+        ]);
+
+        // Nombre total de décodeurs vendus (décodeurs rattachés à une commande)
+        $decodersSold = DB::table('decoders AS d')
+            ->join('decoder_orders AS do', 'do.id', '=', 'd.decoder_order_id')
+            ->when($request->partner_id, function ($q, $partnerId) {
+                $q->where('do.partner_id', $partnerId);
+            })
+            ->when($request->from_date, function ($q, $fromDate) {
+                $q->where('do.created_at', '>=', $fromDate);
+            })
+            ->when($request->to_date, function ($q, $toDate) {
+                $q->where('do.created_at', '<', $toDate);
+            })
+            ->count('d.id');
+
+        $perfs->push((object) [
+            'code' => 'decoders_sold',
+            'name' => 'Décodeurs vendus',
+            'icon_class' => 'fas fa-tv',
+            'card_type' => null,
+            'nb' => (int) $decodersSold,
+            'amount' => 0,
+            'fee' => 0,
+            'commission' => 0,
+            'data_trans_amount' => 0,
+            'data_amount' => 0,
+        ]);
+
+        // Factures (payées / non payées)
+        $invoicePaid = DB::table('invoices AS i')
+            ->when($request->partner_id, function ($q, $partnerId) {
+                $q->where('i.partner_id', $partnerId);
+            })
+            ->when($request->from_date, function ($q, $fromDate) {
+                $q->where('i.created_at', '>=', $fromDate);
+            })
+            ->when($request->to_date, function ($q, $toDate) {
+                $q->where('i.created_at', '<', $toDate);
+            })
+            ->where('i.status', 'paid')
+            ->selectRaw('COUNT(*) AS nb, SUM(total_amount) AS amount')
+            ->first();
+
+        $perfs->push((object) [
+            'code' => 'invoices_paid',
+            'name' => 'Factures payées',
+            'icon_class' => 'fas fa-file-invoice-dollar',
+            'card_type' => null,
+            'nb' => (int) ($invoicePaid->nb ?? 0),
+            'amount' => 0,
+            'fee' => 0,
+            'commission' => 0,
+            'data_trans_amount' => 0,
+            'data_amount' => (int) ($invoicePaid->amount ?? 0),
+        ]);
+
+        $invoiceUnpaid = DB::table('invoices AS i')
+            ->when($request->partner_id, function ($q, $partnerId) {
+                $q->where('i.partner_id', $partnerId);
+            })
+            ->when($request->from_date, function ($q, $fromDate) {
+                $q->where('i.created_at', '>=', $fromDate);
+            })
+            ->when($request->to_date, function ($q, $toDate) {
+                $q->where('i.created_at', '<', $toDate);
+            })
+            ->where('i.status', 'unpaid')
+            ->selectRaw('COUNT(*) AS nb, SUM(total_amount) AS amount')
+            ->first();
+
+        $perfs->push((object) [
+            'code' => 'invoices_unpaid',
+            'name' => 'Factures non payées',
+            'icon_class' => 'fas fa-file-invoice',
+            'card_type' => null,
+            'nb' => (int) ($invoiceUnpaid->nb ?? 0),
+            'amount' => 0,
+            'fee' => 0,
+            'commission' => 0,
+            'data_trans_amount' => 0,
+            'data_amount' => (int) ($invoiceUnpaid->amount ?? 0),
+        ]);
+
         return response()->json($perfs);
     }
 

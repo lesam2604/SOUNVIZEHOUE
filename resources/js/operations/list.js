@@ -185,6 +185,9 @@ function initDataTable() {
           d.card_type = $('#cardType').val() ?? '';
           d.uba_type = $('#ubaType').val() ?? '';
 
+          // DataTables envoie d.columns, mais selon versions/extensions cela peut manquer
+          if (!Array.isArray(d.columns)) d.columns = [];
+
           if (['card_activation', 'card_recharge', 'card_deactivation'].includes(opType.code)) {
             d.columns.push({ data: 'card_id', name: 'card_id', searchable: true, orderable: false });
           }
@@ -193,7 +196,10 @@ function initDataTable() {
           }
         },
         error: (error) => {
-          Swal.fire(error?.responseJSON?.message || 'Erreur chargement liste', '', 'error');
+          const status = error?.status || error?.xhr?.status;
+          const body = error?.responseJSON?.message || error?.responseText || 'Erreur chargement liste';
+          console.error('[list.js] ajax error', { status, error });
+          Swal.fire(`${body}${status ? ` (HTTP ${status})` : ''}`, '', 'error');
         },
         dataSrc: (response) => {
           const rows = (response?.data || []).map((row) => {

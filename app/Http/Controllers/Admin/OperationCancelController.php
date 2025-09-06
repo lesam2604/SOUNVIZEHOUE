@@ -46,16 +46,11 @@ class OperationCancelController extends Controller
 
         DB::transaction(function () use ($req) {
             $operation = $req->operation;
-            // Determine refund amount and revert partner balance for account recharges
-            $opTypeCode = optional($operation->operationType)->code;
-            if ($opTypeCode === 'account_recharge') {
-                $amount = (float) ($operation->data->trans_amount ?? 0);
-                $master = $operation->partner->getMaster();
-                $master->balance -= $amount;
-                $master->save();
-            } else {
-                $amount    = (float) ($operation->amount ?? 0);
-            }
+            // Montant (tous types)
+            $amount    = (float) ($operation->amount
+                ?? data_get($operation->data, 'amount')
+                ?? data_get($operation->data, 'trans_amount')
+                ?? 0);
 
             $collabBal = CollaboratorBalance::firstOrCreate(
                 ['user_id' => $req->requested_by],
@@ -66,6 +61,10 @@ class OperationCancelController extends Controller
             $collabBal->save();
 
             $operation->status = 'pending';
+            // Nettoyer les marqueurs JSON de demande
+            $data = (array) ($operation->data ?? []);
+            unset($data['cancel_requested_at'], $data['cancel_requested_by'], $data['cancel_reason']);
+            $operation->data = (object) $data;
             $operation->save();
 
             $req->status      = 'approved';
@@ -79,16 +78,37 @@ class OperationCancelController extends Controller
 
     public function reject($id)
     {
-        $req = OperationCancellationRequest::findOrFail($id);
+        $req = OperationCancellationRequest::with('operation.partner.user')->findOrFail($id);
 
         if ($req->status !== 'pending') {
             return response()->json(['ok'=>false,'message'=>'Demande déjà traitée.']);
         }
 
-        $req->status      = 'rejected';
-        $req->approved_by = Auth::id();
-        $req->approved_at = now();
-        $req->save();
+        DB::transaction(function () use ($req) {
+            $operation = $req->operation;
+            $amount    = (int) round((float) ($operation->amount
+                ?? data_get($operation->data, 'amount')
+                ?? data_get($operation->data, 'trans_amount')
+                ?? 0));
+
+            // Retour des fonds au partenaire (levée de la réserve)
+            $master = optional($operation->partner)->getMaster();
+            if ($master && $amount > 0) {
+                $master->balance = (float) $master->balance + $amount;
+                $master->save();
+            }
+
+            // Nettoyer les marqueurs JSON de demande
+            $data = (array) ($operation->data ?? []);
+            unset($data['cancel_requested_at'], $data['cancel_requested_by'], $data['cancel_reason']);
+            $operation->data = (object) $data;
+            $operation->save();
+
+            $req->status      = 'rejected';
+            $req->approved_by = Auth::id();
+            $req->approved_at = now();
+            $req->save();
+        });
 
         return response()->json(['ok'=>true,'message'=>'Demande rejetée.']);
     }

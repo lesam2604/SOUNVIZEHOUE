@@ -12,6 +12,8 @@ use App\Models\Operation;
 use App\Models\Partner;
 use App\Models\Notification;
 use App\Models\History;
+use App\Models\User;
+use App\Models\BalanceTransaction;
 use Carbon\Carbon;
 
 class OperationCancelController extends Controller
@@ -74,17 +76,54 @@ class OperationCancelController extends Controller
                 $operation->data = $data;
                 $operation->save();
 
-                // Notification admin (ici, on notifie l’admin principal id=1 ; adapte au besoin)
+                // Notification admins (tous les admins)
                 $link = url('/admin/operations-cancel');
-                Notification::create([
-                    'recipient_id' => 1,
-                    'subject'      => "Demande d'annulation de l'opération {$operation->code}",
-                    'body'         => "Le partenaire #{$partner->id} a demandé l'annulation de l'opération {$operation->code}.",
-                    'icon_class'   => 'fas fa-exclamation-circle',
-                    'link'         => $link,
-                    'created_at'   => $now,
-                    'updated_at'   => $now,
-                ]);
+                try {
+                    $admins = User::role('admin')->get();
+                    foreach ($admins as $admin) {
+                        Notification::create([
+                            'recipient_id' => $admin->id,
+                            'subject'      => "Demande d'annulation de l'opération {$operation->code}",
+                            'body'         => "Le partenaire #{$partner->id} a demandé l'annulation de l'opération {$operation->code}.",
+                            'icon_class'   => 'fas fa-exclamation-circle',
+                            'link'         => $link,
+                            'created_at'   => $now,
+                            'updated_at'   => $now,
+                        ]);
+                    }
+                } catch (\Throwable $e) {}
+
+                // Défalquer immédiatement chez le partenaire (mise en réserve pour l'annulation) — éviter les doublons
+                try {
+                    $master = $operation->partner?->getMaster();
+                    $amount = (int) round((float)($operation->amount
+                        ?? data_get($operation->data, 'amount')
+                        ?? data_get($operation->data, 'trans_amount')
+                        ?? 0));
+                    $alreadyHeld = \App\Models\BalanceTransaction::where([
+                        'operation_id' => $operation->id,
+                        'type' => 'hold_on_cancel_request',
+                    ])->exists();
+                    if ($master && $amount > 0 && !$alreadyHeld) {
+                        $master->balance = (float) $master->balance - $amount;
+                        $master->save();
+
+                        BalanceTransaction::create([
+                            'user_id'           => optional($master->user)->id,
+                            'type'              => 'hold_on_cancel_request',
+                            'amount'            => $amount,
+                            'operation_id'      => $operation->id,
+                            // pas d'ID de requête legacy ici
+                            'created_by'        => $user->id,
+                            'description'       => "Mise en réserve suite à annulation {$operation->code}",
+                            'meta'              => [
+                                'partner_id' => $operation->partner_id,
+                                'operation_code' => $operation->code,
+                                'source' => 'partner.cancel.store',
+                            ],
+                        ]);
+                    }
+                } catch (\Throwable $e) {}
 
                 // Historique utilisateur
                 History::create([

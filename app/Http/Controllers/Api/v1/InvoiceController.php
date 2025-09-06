@@ -10,13 +10,20 @@ use Illuminate\Http\Request;
 use App\Models\User;
 use Dompdf\Dompdf;
 use Dompdf\Options;
+use Carbon\Carbon;
 
 class InvoiceController extends Controller
 {
     protected function nextCode(): string
     {
-        $lastId = (int) (Invoice::max('id') ?? 0) + 1;
-        return 'INV-' . str_pad((string) $lastId, 6, '0', STR_PAD_LEFT);
+        // Cherche le plus grand numéro après le préfixe INV-
+        $maxNum = (int) (Invoice::where('code', 'like', 'INV-%')
+            ->selectRaw("MAX(CAST(SUBSTRING(code, 5) AS UNSIGNED)) as m")
+            ->value('m') ?? 0);
+
+        // Démarre à 5000 si aucune facture n'existe encore
+        $next = max($maxNum, 4999) + 1;
+        return 'INV-' . $next;
     }
 
     public function fetch(Request $request, $id)
@@ -165,16 +172,19 @@ class InvoiceController extends Controller
     {
         $inv = Invoice::with('partner.user', 'operationType')->findOrFail($id);
         $issuer = $inv->created_by ? optional(User::find($inv->created_by)) : null;
+        $nowBenin = Carbon::now('Africa/Porto-Novo');
         $rows = [];
         $rows[] = ['Entreprise', 'AHOTANTI'];
         $rows[] = ['Code', $inv->code];
         $rows[] = ["Type d'opération", optional($inv->operationType)->name];
+        $rows[] = ['Date', $nowBenin->format('d/m/Y')];
+        $rows[] = ['Heure', $nowBenin->format('H:i')];
         $client = $inv->client_type === 'partner'
-            ? trim(($inv->partner->user->first_name ?? '') . ' ' . ($inv->partner->user->last_name ?? ''))
+            ? trim((($inv->partner?->user?->first_name) ?? '') . ' ' . (($inv->partner?->user?->last_name) ?? ''))
             : ($inv->client_name ?? '');
         $rows[] = ['Client', $client];
-        $rows[] = ['Téléphone', $inv->client_phone ?? optional($inv->partner->user)->phone_number];
-        $rows[] = ['Email', $inv->client_email ?? optional($inv->partner->user)->email];
+        $rows[] = ['Téléphone', $inv->client_phone ?? ($inv->partner?->user?->phone_number)];
+        $rows[] = ['Email', $inv->client_email ?? ($inv->partner?->user?->email)];
         $rows[] = ['Émis par', trim(($issuer->first_name ?? '') . ' ' . ($issuer->last_name ?? ''))];
         $rows[] = [];
         $rows[] = ['Désignation', 'Qté', 'PU', 'Total'];
@@ -206,8 +216,9 @@ class InvoiceController extends Controller
     {
         $inv = Invoice::with('partner.user', 'operationType')->findOrFail($id);
         $issuer = $inv->created_by ? optional(User::find($inv->created_by)) : null;
+        $nowBenin = Carbon::now('Africa/Porto-Novo');
         $client = $inv->client_type === 'partner'
-            ? trim(($inv->partner->user->first_name ?? '') . ' ' . ($inv->partner->user->last_name ?? ''))
+            ? trim((($inv->partner?->user?->first_name) ?? '') . ' ' . (($inv->partner?->user?->last_name) ?? ''))
             : ($inv->client_name ?? '');
         $itemsRows = '';
         foreach (($inv->items ?? []) as $it) {
@@ -218,13 +229,26 @@ class InvoiceController extends Controller
             $itemsRows = '<tr><td colspan="4" style="text-align:center">Aucune ligne</td></tr>';
         }
 
-        $html = '<html><head><meta charset="UTF-8"><style>table{width:100%;border-collapse:collapse} th,td{border:1px solid #ddd;padding:6px} h2{margin:0 0 8px 0}</style></head><body>';
-        $html .= '<h2>AHOTANTI</h2>';
+        $html = '<html><head><meta charset="UTF-8"><style>body{margin:0} table{width:100%;border-collapse:collapse} th,td{border:1px solid #ddd;padding:6px} h2{margin:0 0 8px 0}</style></head><body>';
+
+        // Force l'utilisation de logo.jpg pour les factures
+        $logoData = null;
+        $logoPath = public_path('assets/images/logo/logo.jpg');
+        if (is_file($logoPath)) {
+            $logoData = 'data:image/jpeg;base64,' . base64_encode(file_get_contents($logoPath));
+        }
+        if ($logoData) {
+            $html .= '<div style="text-align:center;margin:0 0 16px 0"><img src="'.$logoData.'" style="max-height:180px;height:auto;width:auto;display:block;margin:0 auto;"></div>';
+        } else {
+            $html .= '<h2>AHOTANTI</h2>';
+        }
         $html .= '<p><strong>Facture:</strong> '.e($inv->code).'</p>';
+        $html .= '<p><strong>Date:</strong> '.$nowBenin->format('d/m/Y').'<br>';
+        $html .= '<strong>Heure:</strong> '.$nowBenin->format('H:i').'</p>';
         $html .= '<p><strong>Type d\'opération:</strong> '.e(optional($inv->operationType)->name).'<br>';
         $html .= '<strong>Client:</strong> '.e($client).'<br>';
-        $html .= '<strong>Téléphone:</strong> '.e($inv->client_phone ?? optional($inv->partner->user)->phone_number).'<br>';
-        $html .= '<strong>Email:</strong> '.e($inv->client_email ?? optional($inv->partner->user)->email).'<br>';
+        $html .= '<strong>Téléphone:</strong> '.e($inv->client_phone ?? ($inv->partner?->user?->phone_number)).'<br>';
+        $html .= '<strong>Email:</strong> '.e($inv->client_email ?? ($inv->partner?->user?->email)).'<br>';
         $html .= '<strong>Émis par:</strong> '.e(trim(($issuer->first_name ?? '') . ' ' . ($issuer->last_name ?? ''))).'</p>';
         $html .= '<table><thead><tr><th>Désignation</th><th>Qté</th><th>PU</th><th>Total</th></tr></thead><tbody>'.$itemsRows.'</tbody></table>';
         $html .= '<p style="text-align:right"><strong>Montant:</strong> '.$inv->total_amount.' '.$inv->currency.'</p>';

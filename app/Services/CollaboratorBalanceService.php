@@ -6,6 +6,7 @@ use App\Models\CollaboratorBalance;
 use App\Models\History;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use App\Services\OperationService; // juste pour l'utiliser, pas redéclarer
 
@@ -35,6 +36,14 @@ class CollaboratorBalanceService
                 return $bal->balance;
             }
 
+            // Debug log before checking balance
+            Log::info('collab_balance.check', [
+                'user_id' => $userId,
+                'balance' => (int) $bal->balance,
+                'amount_requested' => (int) $amount,
+                'reason' => $reason,
+            ]);
+
             if ($bal->balance < $amount) {
                 \Log::info("Solde insuffisant — UserID: {$userId}, Solde actuel: {$bal->balance}, Montant demandé: {$amount}");
                 throw new RuntimeException('Solde collaborateur insuffisant pour valider cette opération.');
@@ -43,6 +52,12 @@ class CollaboratorBalanceService
             $bal->balance -= $amount;
             $bal->updated_by = Auth::id() ?: $userId;
             $bal->save();
+
+            Log::info('collab_balance.debited', [
+                'user_id' => $userId,
+                'amount' => (int) $amount,
+                'new_balance' => (int) $bal->balance,
+            ]);
 
             History::create([
                 'user_id'    => $userId,

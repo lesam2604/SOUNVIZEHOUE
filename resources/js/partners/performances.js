@@ -26,7 +26,14 @@ async function refresh() {
   };
 
   for (const opType of data) {
-    if (!['account_recharge', 'balance_withdrawal'].includes(opType.code)) {
+    if (![
+      'account_recharge',
+      'balance_withdrawal',
+      'cards_sold',
+      'decoders_sold',
+      'invoices_paid',
+      'invoices_unpaid',
+    ].includes(opType.code)) {
       tbody.append(`
         <tr>
           <th><i class="${opType.icon_class}"></i> ${opType.name} ${
@@ -60,18 +67,25 @@ async function refresh() {
   `);
 
   for (const opType of data) {
-    if (['account_recharge', 'balance_withdrawal'].includes(opType.code)) {
+    if ([
+      'account_recharge',
+      'balance_withdrawal',
+      'invoices_paid',
+      'invoices_unpaid',
+      'cards_sold',
+      'decoders_sold',
+    ].includes(opType.code)) {
       tbody.append(`
         <tr>
           <th><i class="${opType.icon_class}"></i> ${opType.name} ${
         opType.card_type ?? ''
       }</th>
           <td>${opType.nb}</td>
-          <td>${formatAmountSpaced(
+          <td>${formatAmountSpaced((
             opType.code === 'account_recharge'
               ? opType.data_trans_amount
               : opType.data_amount
-          )}</td>
+          ))}</td>
           <td></td>
           <td></td>
         </tr>

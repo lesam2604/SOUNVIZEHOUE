@@ -77,6 +77,15 @@
             <th>Montant total a payer</th>
             <td id="opTotalAmount" class="fw-bold text-danger"></td>
           </tr>
+          <tr class="d-none">
+            <th>Votre solde</th>
+            <td id="opCurrentBalance" class="fw-bold text-success"></td>
+          </tr>
+          <tr class="d-none">
+            <th>Solde requis</th>
+            <td id="opRequired" class="fw-bold"></td>
+          </tr>
+          
           <tr>
             <th>Commission</th>
             <td id="opCommission" class="fw-bold"></td>

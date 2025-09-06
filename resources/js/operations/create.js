@@ -1,5 +1,7 @@
 let object = null;
 let opType = null;
+let CURRENT_BALANCE = 0;
+let LAST_REQUIRED = 0;
 
 function fetchOpType() {
   let opTypeCode = $('#opTypeCode').val();
@@ -414,7 +416,8 @@ function initFields() {
 }
 
 function getFee(amount = null, cardType = '') {
-  for (let step of opType.fees[cardType]) {
+  const table = (opType && opType.fees && opType.fees[cardType]) || [{ breakpoint: '', value: '0' }];
+  for (let step of table) {
     if (step.breakpoint === '' || amount <= parseFloat(step.breakpoint)) {
       if (/^\d+$/.test(step.value)) {
         let value = parseInt(step.value);
@@ -437,7 +440,8 @@ function getFee(amount = null, cardType = '') {
 }
 
 function getCommission(amount, cardType = '') {
-  for (let step of opType.commissions[cardType]) {
+  const table = (opType && opType.commissions && opType.commissions[cardType]) || [{ breakpoint: '', value: '0' }];
+  for (let step of table) {
     if (step.breakpoint === '' || amount <= parseFloat(step.breakpoint)) {
       if (/^\d+$/.test(step.value)) {
         return parseInt(step.value);
@@ -453,7 +457,14 @@ function getCommission(amount, cardType = '') {
 }
 
 function updateFeeAndCommission(amount = null) {
-  amount = amount === null ? null : parseInt(amount);
+  const parseIntSafe = (v) => {
+    if (v === null || v === undefined) return 0;
+    const s = ('' + v).replace(/\s/g, '').replace(/,/g, '.');
+    const n = parseFloat(s);
+    return isNaN(n) ? 0 : Math.round(n);
+  };
+
+  amount = amount === null ? null : parseIntSafe(amount);
 
   let newAmount, fee, commission;
   const cardType = $('#card_type').val() || '';
@@ -472,10 +483,31 @@ function updateFeeAndCommission(amount = null) {
     commission = 0;
   }
 
+  // Proposer des valeurs par défaut dans les champs manuels si vides
+  const $manualFee = $('#manual_fee');
+  const $manualPlat = $('#manual_platform_commission');
+  if ($manualFee.length && ($manualFee.val() === '' || $manualFee.val() == null)) {
+    $manualFee.val(fee);
+  }
+  if ($manualPlat.length && ($manualPlat.val() === '' || $manualPlat.val() == null)) {
+    const plat = Math.max(fee - commission, 0);
+    $manualPlat.val(plat);
+  }
+
+  // Valeurs effectives tenant compte des saisies manuelles
+  const effFee = parseIntSafe($manualFee.val() || fee || 0) || 0;
+  const effPlat = parseIntSafe($manualPlat.val() || Math.max(fee - commission, 0) || 0) || 0;
+  const effPartnerCommission = Math.max(effFee - effPlat, 0);
+
   $('#opAmount').html(formatAmount(newAmount));
-  $('#opFee').html(formatAmount(fee));
-  $('#opTotalAmount').html(formatAmount(newAmount + fee));
-  $('#opCommission').html(formatAmount(commission));
+  // Total réellement débité côté serveur = montant saisi + frais (pas montant net)
+  // total débité côté serveur = montant net (newAmount) + frais
+  const totalDebited = parseIntSafe(newAmount || 0) + effFee;
+  $('#opTotalAmount').html(formatAmount(totalDebited));
+  $('#opCommission').html(formatAmount(effPartnerCommission));
+  $('#opRequired').html(formatAmount(totalDebited));
+  $('#opCurrentBalance').html(formatAmount(CURRENT_BALANCE));
+  LAST_REQUIRED = totalDebited;
 }
 
 async function otherInits() {
@@ -648,7 +680,8 @@ async function otherInits() {
 
   $('#form').submit(function (e) {
     e.preventDefault();
-    object ? updateObject() : createObject();
+    // Validation locale du solde avant soumission (sauf recharge de compte)
+    // Pas de validation locale du solde (on laisse le serveur d�cider)
   });
 
   // Toggle des blocs selon type de client
@@ -676,10 +709,33 @@ async function otherInits() {
       $(`#${opType.amount_field}`).keyup(function () {
         updateFeeAndCommission($(this).val() || 0);
       });
+      // Déclencher un premier calcul pour remplir "Solde requis"
+      updateFeeAndCommission($(`#${opType.amount_field}`).val() || 0);
     } else {
       updateFeeAndCommission(0);
     }
   }
+
+  // Charger le solde courant (collaborateur connecté)
+  try {
+    const { data } = await ajax({ url: `${API_BASEURL}/collabs/me/balance`, type: 'GET' });
+    CURRENT_BALANCE = parseInt(data?.balance ?? 0) || 0;
+    $('#opCurrentBalance').html(formatAmount(CURRENT_BALANCE));
+  } catch (e) {
+    CURRENT_BALANCE = 0;
+  }
+
+  // Forcer un recalcul pour afficher 'Solde requis' après récup du solde
+  if (!['account_recharge', 'balance_withdrawal'].includes(opType.code)) {
+    const amt = opType.amount_field ? ($(`#${opType.amount_field}`).val() || 0) : 0;
+    updateFeeAndCommission(amt);
+  }
+
+  // Réagir aux saisies manuelles pour mettre à jour les totaux affichés
+  $('#manual_fee, #manual_platform_commission').on('input', function () {
+    const amt = opType.amount_field ? ($(`#${opType.amount_field}`).val() || 0) : 0;
+    updateFeeAndCommission(amt);
+  });
 
   setTitle(
     object

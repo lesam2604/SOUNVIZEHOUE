@@ -6,6 +6,10 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Operation;
 use App\Models\OperationCancellationRequest;
+use App\Models\OperationCancelRequest;
+use App\Models\Notification;
+use App\Models\User;
+use App\Models\BalanceTransaction;
 use App\Services\CollaboratorBalanceService;
 use Illuminate\Support\Facades\DB;
 
@@ -64,6 +68,50 @@ class OperationCancellationRequestController extends Controller
             'reason'       => $reason,
             'status'       => 'pending',
         ]);
+        // Notifier les admins
+        try {
+            $admins = User::role('admin')->get();
+            foreach ($admins as $admin) {
+                Notification::create([
+                    'recipient_id' => $admin->id,
+                    'subject'      => "Demande d'annulation {$operation->code}",
+                    'body'         => "Un utilisateur #{$user->id} a demandé l'annulation de l'opération {$operation->code}.",
+                    'icon_class'   => 'fas fa-exclamation-circle',
+                    'link'         => url('/admin/operations-cancel'),
+                ]);
+            }
+        } catch (\Throwable $e) {}
+
+        // Défalquer immédiatement chez le partenaire (réserve) — sécurisé contre les doublons
+        try {
+            $partnerMaster = optional($operation->partner)->getMaster();
+            $amount = (int) round((float)($operation->amount
+                ?? data_get($operation->data, 'amount')
+                ?? data_get($operation->data, 'trans_amount')
+                ?? 0));
+            $alreadyHeld = BalanceTransaction::where([
+                'operation_id' => $operation->id,
+                'type' => 'hold_on_cancel_request',
+            ])->exists();
+            if ($partnerMaster && $amount > 0 && !$alreadyHeld) {
+                $partnerMaster->balance = (float) $partnerMaster->balance - $amount;
+                $partnerMaster->save();
+
+                BalanceTransaction::create([
+                    'user_id'           => optional($partnerMaster->user)->id,
+                    'type'              => 'hold_on_cancel_request',
+                    'amount'            => $amount,
+                    'operation_id'      => $operation->id,
+                    'cancel_request_id' => $ocr->id,
+                    'created_by'        => $user->id,
+                    'description'       => "Mise en réserve suite à annulation {$operation->code}",
+                    'meta'              => [
+                        'partner_id' => $operation->partner_id,
+                        'operation_code' => $operation->code,
+                    ],
+                ]);
+            }
+        } catch (\Throwable $e) {}
 
         return response()->json(['message' => "Demande d'annulation envoyée avec succès."]);
     }
@@ -102,16 +150,11 @@ class OperationCancellationRequestController extends Controller
 
         DB::transaction(function () use ($req) {
             $operation = $req->operation;
-            // Determine refund amount and revert partner balance for account recharges
-            $opTypeCode = optional($operation->operationType)->code;
-            if ($opTypeCode === 'account_recharge') {
-                $amount = (float) ($operation->data->trans_amount ?? 0);
-                $master = $operation->partner->getMaster();
-                $master->balance -= $amount;
-                $master->save();
-            } else {
-                $amount    = (float) ($operation->amount ?? 0);
-            }
+            // Montant à créditer au collaborateur (tous types)
+            $amount = (float)($operation->amount
+                ?? data_get($operation->data, 'amount')
+                ?? data_get($operation->data, 'trans_amount')
+                ?? 0);
 
             // Créditer le solde du collaborateur qui a demandé
             app(CollaboratorBalanceService::class)
@@ -119,6 +162,10 @@ class OperationCancellationRequestController extends Controller
 
             // Revenir à l'état pending côté opération
             $operation->status = 'pending';
+            // Nettoyer les marqueurs de demande dans le JSON data
+            $data = (array) ($operation->data ?? []);
+            unset($data['cancel_requested_at'], $data['cancel_requested_by'], $data['cancel_reason']);
+            $operation->data = (object) $data;
             $operation->save();
 
             // Mettre à jour la demande
@@ -143,23 +190,61 @@ class OperationCancellationRequestController extends Controller
      */
     public function rejectCancellation(Request $request, $requestId)
     {
-        $req = OperationCancellationRequest::findOrFail($requestId);
+        $req = OperationCancellationRequest::with('operation.partner.user')->findOrFail($requestId);
 
         if ($req->status !== 'pending') {
             return response()->json(['message' => 'Demande déjà traitée.'], 422);
         }
 
-        $req->status      = 'rejected';
-        $req->approved_by = auth()->id();
-        $req->approved_at = now();
-        $req->save();
+        DB::transaction(function () use ($req) {
+            $operation = $req->operation;
+            $amount = (int) round((float)($operation->amount
+                ?? data_get($operation->data, 'amount')
+                ?? data_get($operation->data, 'trans_amount')
+                ?? 0));
 
-        // Mettre à jour l'ancienne table si une entrée existe
-        if ($legacy = OperationCancelRequest::where('operation_id', $req->operation_id)->where('status','pending')->first()) {
-            $legacy->status   = 'rejected';
-            $legacy->admin_id = auth()->id();
-            $legacy->save();
-        }
+            $partnerMaster = optional($operation->partner)->getMaster();
+            $alreadyHeld = BalanceTransaction::where([
+                'operation_id' => $operation->id,
+                'type' => 'hold_on_cancel_request',
+            ])->exists();
+            if ($partnerMaster && $amount > 0 && $alreadyHeld) {
+                $partnerMaster->balance = (float) $partnerMaster->balance + $amount;
+                $partnerMaster->save();
+
+                BalanceTransaction::create([
+                    'user_id'           => optional($partnerMaster->user)->id,
+                    'type'              => 'cancel_reject_return_to_partner',
+                    'amount'            => $amount,
+                    'operation_id'      => $operation->id,
+                    'cancel_request_id' => $req->id,
+                    'created_by'        => auth()->id(),
+                    'description'       => "Retour au partenaire après rejet annulation {$operation->code}",
+                    'meta'              => [
+                        'partner_id' => $operation->partner_id,
+                        'operation_code' => $operation->code,
+                    ],
+                ]);
+            }
+
+            // Nettoyer les marqueurs JSON de demande
+            $data = (array) ($operation->data ?? []);
+            unset($data['cancel_requested_at'], $data['cancel_requested_by'], $data['cancel_reason']);
+            $operation->data = (object) $data;
+            $operation->save();
+
+            $req->status      = 'rejected';
+            $req->approved_by = auth()->id();
+            $req->approved_at = now();
+            $req->save();
+
+            // Mettre à jour l'ancienne table si une entrée existe
+            if ($legacy = OperationCancelRequest::where('operation_id', $req->operation_id)->where('status','pending')->first()) {
+                $legacy->status   = 'rejected';
+                $legacy->admin_id = auth()->id();
+                $legacy->save();
+            }
+        });
 
         return response()->json(['message' => "Demande d'annulation rejetée."]);
     }

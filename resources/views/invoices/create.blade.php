@@ -18,6 +18,7 @@
         <label for="clientType" class="form-label">Type de client</label>
         <select id="clientType" class="form-select">
           <option value="partner" selected>Partenaire</option>
+          <option value="extra_client">Client extra</option>
           <option value="external">Client (manuel)</option>
         </select>
       </div>
@@ -25,6 +26,12 @@
       <div class="col-12 col-lg-6 mb-3" id="partnerSelectBlock">
         <label for="partnerId" class="form-label">Partenaire</label>
         <select id="partnerId" class="form-select" style="width: 100%"></select>
+      </div>
+
+      <div class="col-12 col-lg-6 mb-3" id="extraClientSelectBlock" style="display:none;">
+        <label for="extraClientId" class="form-label">Client extra</label>
+        <select id="extraClientId" class="form-select" style="width: 100%"></select>
+        <div class="form-text">Sélectionnez un client extra existant.</div>
       </div>
 
       <div id="manualClientBlock" class="col-12">
@@ -77,9 +84,39 @@
     </form>
   </div>
 </div>
+<div class="card mt-3" id="extraClientDetails" style="display:none;">
+  <div class="card-header d-flex align-items-center">
+    <h5 class="mb-0">Détails client extra</h5>
+  </div>
+  <div class="card-body">
+    <table class="table table-bordered">
+      <tbody>
+        <tr>
+          <th>Entreprise</th>
+          <td id="ecCompany"></td>
+        </tr>
+        <tr>
+          <th>IFU</th>
+          <td id="ecTin"></td>
+        </tr>
+        <tr>
+          <th>Nom</th>
+          <td id="ecFullName"></td>
+        </tr>
+        <tr>
+          <th>Téléphone</th>
+          <td id="ecPhone"></td>
+        </tr>
+        <tr>
+          <th>Email</th>
+          <td id="ecEmail"></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
 @endsection
 
 @section('pageJs')
   @vite('resources/js/invoices/create.js')
 @endsection
-
